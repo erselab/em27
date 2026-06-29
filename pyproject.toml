@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "em27gert"
+version = "0.0.1"
+description = "EM27/SUN ↔ GERT comparison and closed-loop validation"
+requires-python = ">=3.10"
+dependencies = [
+    "gert",            # install the local gert repo editable: pip install -e ../../gert
+    "numpy",
+    "scipy",
+    "pandas",
+    "h5py",
+    "matplotlib",
+]
+
+[tool.setuptools]
+packages = ["em27gert"]
