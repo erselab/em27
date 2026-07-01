@@ -59,7 +59,12 @@ project only knows how to *read EM27 data* and *describe the EM27 instrument*.
 
 ## 2. Milestones
 
-### M0 — Ingest & alignment *(readers + one smoke test)*
+> **STATUS (all done).** M0–M5 complete; `notebooks/em27_realdata.ipynb` runs the
+> whole chain. Headline: GERT reproduces PROFFAST **XCO₂ to ≈0.2 ppm (airmass-
+> corrected)**, **XCH₄ to ≈2 %**; error budget is **ILS-dominated**. See
+> `ONBOARDING.md` §5 for per-milestone results and §7 for open threads.
+
+### M0 — Ingest & alignment *(readers + one smoke test)* — ✅ done
 - Finish `em27gert/readers.py`:
   - `read_proffast_bin(path)` → ν grid, measured spectrum, geometry (SZA,
     azimuth, UT time, lat/lon/alt). (Have the converter; wrap it.)
@@ -71,7 +76,7 @@ project only knows how to *read EM27 data* and *describe the EM27 instrument*.
   present in the CSV). Pick the nearest `.map` by UT hour.
 - *Exit:* one spectrum + its prior + its PROFFAST answer, all in memory.
 
-### M1 — EM27 instrument model in GERT
+### M1 — EM27 instrument model in GERT — ✅ done
 - **Microwindows** (`gert.SpectralWindow`), COCCON/PROFFAST set:
   - XCO₂ ≈ 6173–6390 cm⁻¹ · XCH₄ ≈ 5897–6145 · O₂ ≈ 7765–8005 (airmass)
     · H₂O · XCO ≈ 4208–4257 cm⁻¹ (extended `SM` channel).
@@ -86,7 +91,7 @@ project only knows how to *read EM27 data* and *describe the EM27 instrument*.
 - **Solar:** `gert.SolarSpectrum` (recently extended to full EMIT range) +
   the solar-Doppler pre-shift we added. Confirm it covers 4200–8100 cm⁻¹.
 
-### M2 — Forward vs. real, *open loop* (the physics check)
+### M2 — Forward vs. real, *open loop* (the physics check) — ✅ done
 - One clean spectrum (low SZA, low `invparms` rms): build the scene from its
   `.map` + ground pressure; geometry from the `.BIN`. Run
   `gert.ForwardModel` with `TransmissionSolver` → simulate; apply solar ×
@@ -95,7 +100,7 @@ project only knows how to *read EM27 data* and *describe the EM27 instrument*.
 - *Exit:* residuals spectrally unbiased and < a few % after a fitted continuum
   — validates spectroscopy + ILS + solar end-to-end **before** retrieving.
 
-### M3 — Single-spectrum retrieval vs PROFFAST
+### M3 — Single-spectrum retrieval vs PROFFAST — ✅ done
 - `gert.GERTRetrieval` + `TransmissionSolver`, state vector:
   per-gas column **scaling** (`transmission_scaling`) + continuum/baseline
   + **dispersion** nuisance + **solar Doppler** (all already in `gert`).
@@ -104,13 +109,13 @@ project only knows how to *read EM27 data* and *describe the EM27 instrument*.
 - Compare to that spectrum's `invparms` row.
 - *Exit:* within PROFFAST single-sounding scatter (XCO₂ ≈ 0.5–1 ppm).
 
-### M4 — Full-day time series, *closed loop* (the headline)
+### M4 — Full-day time series, *closed loop* (the headline) — ✅ done
 - Loop all ~1303 scans → GERT Xgas vs PROFFAST `invparms` across the day.
 - Diagnostics: bias / RMS / correlation of (GERT − PROFFAST) for XCO₂, XCH₄,
   XCO; dependence on **SZA/airmass** (the classic FTIR systematic) and on time.
 - *Exit:* "GERT reproduces COCCON L2 to within X ppm with airmass slope Y."
 
-### M5 — RT-fidelity & nuisance experiments (GERT's value-add)
+### M5 — RT-fidelity & nuisance experiments (GERT's value-add) — ✅ done
 - **Solver ladder in direct-sun geometry:** `TransmissionSolver` vs adding
   scattering (`VectorDOSolver`/`XRTMSolver`). Largely a null test confirming
   transmission suffices, but it *quantifies* the Rayleigh/aerosol multiple-

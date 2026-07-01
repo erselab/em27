@@ -42,6 +42,21 @@ def ils_from_me_pe(
     resp = _trapz(ME[None, :] * np.cos(phase - PE[None, :]), x, axis=1)
     return ILS(type="tabulated", wn_offsets=off, response=resp)
 
+def ils_gaussian(fwhm_cm: float, half_width_cm: float = 4.0, n: int = 2001) -> ILS:
+    """A smooth Gaussian effective ILS of the given FWHM (cm⁻¹).
+
+    For the *calibrated* COCCON L1 spectra the effective line shape is well
+    described by a smooth ~0.5 cm⁻¹ kernel rather than a bare OPD sinc: the
+    dominant broadening is the EM27/SUN finite field of view (≈30 mrad), which
+    the bare ME/PE self-apodization (``ils_from_me_pe``) omits.  The effective
+    FWHM is identifiable from the spectrum (a χ² scan over FWHM has a sharp
+    minimum near 0.5 cm⁻¹), so it can be treated as a retrievable parameter.
+    """
+    off = np.linspace(-half_width_cm, half_width_cm, n)
+    sigma = float(fwhm_cm) / 2.354820045
+    return ILS(type="tabulated", wn_offsets=off, response=np.exp(-0.5 * (off / sigma) ** 2))
+
+
 # (label, wn_min, wn_max, molecules) — COCCON/PROFFAST EM27 microwindows
 # (Frey et al. 2019).  Molecule names match the ABSCO datasets; the O2 window
 # uses the 1.27 um ``o2_1p27`` table (not the 760 nm A-band ``o2``).  All four
@@ -62,16 +77,19 @@ def build_em27_instrument(
     snr: float = 300.0,
     channels_per_fwhm: int = 3,
     windows=EM27_WINDOWS,
+    ils: ILS = None,
 ) -> Instrument:
     """Build a `gert.Instrument` for EM27/SUN.
 
-    The ILS is a sinc from the OPD (M1 first pass).  Refining it with the
-    per-channel ME/PE from ``ils_list.csv`` is the M5 fidelity experiment.
+    The ILS is a sinc from the OPD (M1 first pass).  Pass an explicit ``ils``
+    (e.g. the self-apodizing ME/PE ILS from :func:`ils_from_me_pe`, built from
+    ``ils_list.csv``) to use the measured instrument line shape instead.
     """
-    try:
-        ils = ILS.from_mopd(opd_cm, apodization=apodization)
-    except Exception:
-        ils = ILS.from_mopd(opd_cm)  # fall back to default apodization
+    if ils is None:
+        try:
+            ils = ILS.from_mopd(opd_cm, apodization=apodization)
+        except Exception:
+            ils = ILS.from_mopd(opd_cm)  # fall back to default apodization
     win = [
         SpectralWindow(
             wn_min=wmin, wn_max=wmax, ils=ils, molecules=mols, label=label,

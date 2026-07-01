@@ -1,8 +1,15 @@
 # EM27/SUN ↔ GERT — Onboarding for the retrieval work
 
-Read this first, then `PLAN.md`. You're picking up a validated forward model
-(M0–M2 done) and your job is the retrieval (**M3 onward**). This file is the
-fast path to context plus the non-obvious gotchas that already cost time.
+Read this first, then `PLAN.md`. **M0–M5 are now done** (forward model +
+retrieval + full-day time series + RT/nuisance experiments). The end-to-end
+driver is `notebooks/em27_realdata.ipynb` (runs M0–M5 clean) plus the reusable
+`em27gert/retrieval.py` and the M4 batch loop `scripts/run_m4.py`. This file is
+the fast path to context plus the non-obvious gotchas that already cost time.
+
+**Headline result:** GERT reproduces COCCON/PROFFAST **XCO₂ to ≈0.2 ppm
+(airmass-corrected)** and **XCH₄ to ≈2 %**, with an **ILS-dominated** error
+budget. Remaining threads: a ~+46 ppb (2.4 %) constant XCH₄ offset, and a proper
+ME/PE⊛FOV ILS (needs FOV support in gert).
 
 ---
 
@@ -90,19 +97,30 @@ Gotchas:
 
 ---
 
-## 5. Status: M0–M2 done and validated
+## 5. Status: M0–M5 done and validated
 
 - **M0** — `map_to_atmosphere` builds the prior; GERT prior column matches
-  PROFFAST L2 to **0.07 ppm XCO₂** (431.37 vs 431.44). Scene conversions are
-  correct (see gotchas).
-- **M1** — `build_em27_instrument()` builds the four windows + ILS from OPD.
+  PROFFAST L2 to **0.07 ppm XCO₂** (431.37 vs 431.44).
+- **M1** — `build_em27_instrument()` builds the four windows + ILS.
 - **M2** — open-loop forward (`TransmissionSolver`) vs real spectrum, residual
-  after a deg-2 continuum/gain fit: **XCH4 1.5%, XCO2 2.7%, XCO 4.6%, O2 3.2%**.
-  Line positions match the measured spectrum exactly (see `figures/`). This is
-  the expected few-% level before any gas/dispersion/ILS fit.
+  after a deg-2 continuum fit: **XCH4 1.5%, XCO2 2.7%, XCO 4.6%**; line positions
+  exact. FFT of the residual → power at the line-spacing scale (ILS/line-shape),
+  **no channel fringes**, so a high-order/spline baseline would not help.
+- **M3** — single-spectrum OE retrieval (`GERTRetrieval` + `TransmissionSolver`,
+  gas scaling + `solar_gain` + first-order dispersion + solar Doppler; O₂ dropped,
+  airmass from `gndP`; `p_scale` frozen). The **effective ILS resolution is
+  retrieved** (χ² scan → 0.5 cm⁻¹). Result: **XCO₂ +3.7 ppm, XCH₄ +1.9 %**,
+  χ²≈2.4. A forward run **fixed at PROFFAST's columns** fits equally well
+  (Δχ²≈0.05) → GERT and PROFFAST are consistent to within the spectral info.
+- **M4** — full-day loop (`scripts/run_m4.py`, 8-way fork parallel, ABSCO shared
+  COW; ~4 min for 101 scans → `data/m4_results.csv`). 98 soundings, airmass
+  1.2–2.9: **XCO₂ +3.1 ppm/airmass slope but +0.2 ppm at airmass 1**; XCH₄ a
+  near-constant **+46 ppb (2.4 %)** offset; XCO +16 ppb/airmass.
+- **M5** — nuisance ablations rank the budget (**ILS ≫ dispersion > Doppler**;
+  explains the airmass slope) and an RT null test (clear-sky scattering into the
+  FOV ~1e-7 of the direct beam → `TransmissionSolver` is correct).
 
-The notebook `notebooks/em27_realdata.ipynb` runs all of this end-to-end and
-regenerates the two figures.
+`notebooks/em27_realdata.ipynb` runs M0–M5 end-to-end and regenerates all figures.
 
 ---
 
@@ -122,42 +140,52 @@ regenerates the two figures.
 4. **Surface pressure / airmass:** there's no usable O₂ A-band; derive the
    dry-air column / `XAIR` from `gndP` (in the L2 file) the way PROFFAST does.
    For a fair XCO₂/XCH₄/XCO comparison, match PROFFAST's airmass definition.
-5. **ME/PE ILS is a sub-% effect** here (ME=0.984 → 1.6% apodization). A nominal
-   sinc/`from_mopd` ILS is fine for M2/M3; `ils_from_me_pe()` exists for the M5
-   refinement but won't move the needle much.
-6. EM27 real resolution ≈ **0.5 cm⁻¹** (correlation peaks there); `from_mopd(1.8,
-   'BH3')` gives FWHM 0.63 — close. Worth tuning the apodization in M3.
+5. **CORRECTION — the ILS is the DOMINANT error, not sub-%.** The old note
+   (ME=0.984 → "1.6 % apodization, won't move the needle") is true for line
+   *positions* (M2) but **false for the retrieved column**: the M5 ablation shows
+   ±0.05 cm⁻¹ of effective resolution → **±25 ppm XCO₂**, and the bare ME/PE ILS
+   (FWHM 0.34) is catastrophic (χ²≈100, XCO₂ −190 ppm). The reason: `ils_list`
+   ME/PE omits the EM27 **finite FOV (≈30 mrad)**, which is the *larger*
+   broadening. The data wants a smooth **~0.5 cm⁻¹** effective ILS — use
+   `instrument.ils_gaussian(0.5)` (the M3 χ² scan finds this minimum). A bare
+   `ils_from_me_pe()` does *not* work without folding FOV in.
+6. EM27 effective resolution ≈ **0.5 cm⁻¹** (the M3 χ² scan over Gaussian FWHM
+   minimises there; consistent with 30 mrad FOV + 1.8 cm OPD). `from_mopd(1.8,
+   'HN')` (FWHM 0.55) is a near-equivalent fallback; `'BH3'` (0.63) and bare
+   sinc (0.34) bias the columns by tens of ppm.
 7. `numpy` here is 2.x: `np.trapz`→`np.trapezoid`, `arr.ptp()`→`np.ptp(arr)`.
 
 ---
 
-## 7. Your job: M3 → M5 (see PLAN.md for detail)
+## 7. Where the code lives (M3–M5 done)
 
-- **M3** — single-spectrum retrieval vs PROFFAST. Use `gert.GERTRetrieval` +
-  `TransmissionSolver` with `StateVector.transmission_scaling(...)` (per-gas
-  column scaling + `solar_gain` continuum). Add the **dispersion** nuisance
-  (shift+stretch — already in gert) and **solar Doppler**. Convert retrieved
-  scaled column → Xgas and compare to the spectrum's `invparms` row.
-  Target: within PROFFAST single-sounding scatter (XCO₂ ≈ 0.5–1 ppm).
-- **M4** — loop all ~1303 scans → time series; bias/RMS vs PROFFAST and vs
-  airmass (the classic FTIR systematic). The headline result.
-- **M5** — RT-fidelity (Transmission vs scattering — mostly a null test) +
-  nuisance ablations (ILS ME/PE, Doppler, dispersion).
+The retrieval is encapsulated in **`em27gert/retrieval.py::retrieve_spectrum()`**
+— used by both the notebook and the M4 loop. It builds the prior, forward,
+`y_obs` (measured ÷ per-window deg-2 continuum, **wavelength order** — gotcha #1),
+`Sy` (0.5 % model-error floor), runs `GERTRetrieval` (analytic Jacobians), and
+returns retrieved vs PROFFAST Xgas. Ablation knobs: `use_doppler`,
+`dispersion_order` (0 = off), `ils` override, `res_eff`, `freeze_gas`.
 
-The retrieval call pattern (from the gert TCCON notebook, adapt):
 ```python
-sv = StateVector.transmission_scaling(n_bands=len(inst.windows),
-        gases=['co2','ch4','h2o'], co2_uncert=0.10, ch4_uncert=0.20,
-        solar_gain_uncert=0.20)
-fm_prior = ForwardModel(atm, absco, inst, geo,
-                        solver=TransmissionSolver(jacobians=True),
-                        solar_spectrum=solar)
-ret = GERTRetrieval(fm_prior, y_obs, Sy_inv, sv, prior_albedo=..., solar_doppler=...)
-result = ret.run()
+from em27gert.retrieval import retrieve_spectrum
+r = retrieve_spectrum(PICK, inv, DATA, absco, solar)         # baseline M3
+r = retrieve_spectrum(PICK, inv, DATA, absco, solar, dispersion_order=0)  # ablation
 ```
-Key: GERT analytic Jacobians (no finite differences). `y_obs` must be on the
-instrument grid in the **same order** GERT produces (wavelength order — see
-gotcha #1); build `Sy_inv` from the per-channel SNR / measurement noise.
+
+Batch: `PYTHONPATH=. python scripts/run_m4.py --gert ../../gert --stride 13
+--workers 8`.
+
+### Open threads for the next session
+- **XCH₄ +46 ppb (2.4 %) constant offset** — the largest non-airmass discrepancy,
+  unexplained (spectroscopy / a-priori shape?). Start here.
+- **ILS** is the dominant error. A physical **ME/PE ⊛ FOV** ILS (fold the 30 mrad
+  FOV into `ils_from_me_pe`) should beat the empirical `ils_gaussian(0.5)` — but
+  gert has no FOV term in `ILS`, so this needs a small gert addition.
+- **Wavenumber calibration**: dispersion absorbs a real ~20 ppm (Δν/ν) scale
+  offset (FTS HeNe calibration). Applying it up front would free dispersion for
+  genuine physical shifts (won't change columns).
+- The M4 run is a **subsample** (stride 13). Full ~1303-scan run is ~50 min at
+  8 workers if a publication time series is wanted.
 
 ---
 
