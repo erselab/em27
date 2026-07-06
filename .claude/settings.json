@@ -52,7 +52,12 @@
       "Bash(awk '$1==\"blob\"{print $2, $3}')",
       "Bash(grep -E '\\\\.pyc$|\\\\.DS_Store$')",
       "Bash(git check-ignore *)",
-      "Bash(awk '{printf \"%.0f KB\\\\n\",$1/1024}')"
+      "Bash(awk '{printf \"%.0f KB\\\\n\",$1/1024}')",
+      "Bash(xargs -0 git rm --cached --quiet)",
+      "Bash(git commit --quiet -m 'chore: untrack files already covered by .gitignore *)"
+    ],
+    "additionalDirectories": [
+      "/Users/scrowell/Library/CloudStorage/GoogleDrive-seanmrcrowell@gmail.com/My Drive/gert"
     ]
   }
 }

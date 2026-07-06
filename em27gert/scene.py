@@ -16,8 +16,11 @@ from .readers import read_map, _MAP_GAS_SCALE
 
 _MW_RATIO = 0.018015 / 0.028964  # M_H2O / M_dry_air ≈ 0.622
 
-# gases we hand to GERT (must exist in the ABSCO table)
-_GERT_GASES = ["co2", "ch4", "h2o", "co", "n2o"]
+# gases we hand to GERT (must exist in the ABSCO table).  The atm gas name must
+# match the window/ABSCO molecule name; O2 uses the 1.27 µm table ``o2_1p27``
+# but the .map column is plain ``o2`` (mapped via _GAS_MAP_COL).
+_GERT_GASES = ["co2", "ch4", "h2o", "co", "n2o", "o2_1p27"]
+_GAS_MAP_COL = {"o2_1p27": "o2"}  # atm gas name -> .map column name
 
 
 def map_to_atmosphere(map_path, p_surface_pa: float | None = None) -> AtmosphericProfile:
@@ -45,9 +48,10 @@ def map_to_atmosphere(map_path, p_surface_pa: float | None = None) -> Atmospheri
 
     gases: dict[str, np.ndarray] = {}
     for g in _GERT_GASES:
-        if g not in df.columns:
+        col = _GAS_MAP_COL.get(g, g)
+        if col not in df.columns:
             continue
-        gases[g] = df[g].to_numpy()[sl] * _MAP_GAS_SCALE[g] * dry_fac
+        gases[g] = df[col].to_numpy()[sl] * _MAP_GAS_SCALE[col] * dry_fac
 
     # specific humidity q [kg/kg] from dry H2O VMR
     w = _MW_RATIO * gases["h2o"]            # mass mixing ratio (kg/kg dry)

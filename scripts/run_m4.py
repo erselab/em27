@@ -14,17 +14,18 @@ import pandas as pd
 PROJ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJ))
 
-from em27gert.readers import read_invparms
+from em27gert.readers import read_invparms, nearest_map
 from em27gert.retrieval import retrieve_spectrum
 
 # Populated in the parent before the (fork) pool is created; workers inherit
 # these via copy-on-write, so the 2.2 GB ABSCO table is shared, not copied.
-_ABSCO = _SOLAR = _INV = _DATA = None
+# _MAP, when set, holds a single prior .map fixed across every scan.
+_ABSCO = _SOLAR = _INV = _DATA = _MAP = None
 
 
 def _worker(pick):
     try:
-        return retrieve_spectrum(pick, _INV, _DATA, _ABSCO, _SOLAR)
+        return retrieve_spectrum(pick, _INV, _DATA, _ABSCO, _SOLAR, map_path=_MAP)
     except Exception as e:
         return {"spectrum": pick, "error": repr(e)}
 
@@ -36,10 +37,14 @@ def main():
     ap.add_argument("--max", type=int, default=0, help="cap number of scans (0 = no cap)")
     ap.add_argument("--sza-max", type=float, default=80.0)
     ap.add_argument("--workers", type=int, default=8, help="parallel processes (fork)")
+    ap.add_argument("--map", default=None,
+                    help="hold ONE prior .map fixed for every scan. Give a path or a "
+                         "3-hourly tag (e.g. '15Z'); 'median' picks the map nearest the "
+                         "median observation time. Default: per-scan nearest_map.")
     ap.add_argument("--out", default=str(PROJ / "data/m4_results.csv"))
     args = ap.parse_args()
 
-    global _ABSCO, _SOLAR, _INV, _DATA
+    global _ABSCO, _SOLAR, _INV, _DATA, _MAP
     gert = Path(args.gert).resolve()
     from gert.absco import ABSCOTable
     from gert.solar import SolarSpectrum
@@ -54,6 +59,22 @@ def main():
     if args.max:
         picks = picks[:args.max]
     n = len(picks)
+
+    # Resolve the single fixed prior (if requested).
+    if args.map:
+        map_dir = _DATA / "map"
+        if args.map in ("median", "auto"):
+            ut_med = float(sn.loc[picks, "UTtimeh"].astype(float).median())
+            _MAP = nearest_map(map_dir, ut_med, "2026-04-06")
+            print(f"single fixed prior: median UT={ut_med:.2f}h -> {_MAP.name}", flush=True)
+        elif Path(args.map).exists():
+            _MAP = Path(args.map)
+        else:                                   # a tag like '15Z'
+            hits = sorted(map_dir.glob(f"*{args.map}.map"))
+            if not hits:
+                ap.error(f"no .map matching tag {args.map!r} in {map_dir}")
+            _MAP = hits[0]
+        print(f"single fixed prior for all scans: {_MAP.name}", flush=True)
     print(f"{n} scans (stride={args.stride}, SZA<{args.sza_max}, workers={args.workers})",
           flush=True)
 
