@@ -37,9 +37,11 @@ def build_physical_ils(data_dir, fwhm_cm=RES_EFF_CM, apod="nb_medium",
                         float(row["ME2"]), float(row["PE2"]),
                         apod=apod, fwhm_cm=fwhm_cm)
 GASES = ("co2", "ch4", "co", "n2o", "h2o")
-# O2/XAIR is opt-in: pass windows=EM27_WINDOWS and gases=GASES_WITH_O2.  The O2
-# 1.27 µm band under-absorbs in the current ABSCO (no CIA), so XAIR is biased
-# (~0.54 at res 0.5) and O2 is NOT in the default Xgas retrieval.
+# O2/XAIR is opt-in: pass windows=EM27_WINDOWS and gases=GASES_WITH_O2 to add the
+# 1.27 µm O2 window.  With O2 CIA merged into absco.h5 (2026-07-17), XAIR recovers
+# to ~1.05 (PROFFAST 1.00); the residual +5 % is O2 line speed-dependence, which
+# HITRAN2024 cannot supply (SD params all-nan for O2 iso-1).  O2 is kept OUT of the
+# default 3-window retrieval because XAIR is an airmass diagnostic, not an Xgas.
 GASES_WITH_O2 = ("co2", "ch4", "co", "n2o", "h2o", "o2_1p27")
 O2_DRY_MF = 0.2095   # assumed dry-air O2 mole fraction (PROFFAST XAIR convention)
 

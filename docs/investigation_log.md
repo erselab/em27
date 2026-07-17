@@ -507,6 +507,25 @@ H₂O its full data-supported profile freedom and asking if the drift moves.
   diurnal drift is not a water-profile-shape effect** — it tracks **airmass**, back
   to the ADCF (single-day degenerate, §20). Code left in, default **off**.
 
+### 23. `absco.h5` corruption + rebuild — the merged spectroscopy re-validated (2026-07-17)
+A later session found `../../gert/input/absco/absco.h5` **reverted** — a Google
+Drive restore had rolled it back to a pre-§18 state: `ch4` narrow (5995–6285,
+would not serve XCH₄ @ 5897 or XCO₂ @ 6390), iso-1 values, and **no O₂ CIA**. The
+§18 all-isotopologue + CIA work was intact only in a backup (`absco.bkup_precia.h5`
+held the all-iso base; the CIA lived in `data/o2_cia.npz`).
+- **Rebuilt** `absco.h5 = pre-CIA all-iso base + o2_cia.npz`. Integrity verified:
+  the npz reproduces the base line to 2.7e-8 (same grid), CIA = 53.4 % of the O₂
+  band, floor/peak 1.7e-5 → 6.3e-3, `cia_added=True`. All four EM27 windows load
+  on-grid; O₂ A-band untouched.
+- **Re-validated end-to-end** (not in-memory) on the clean spectrum
+  `260406_163455SN`: **XAIR 1.050** (PROFFAST 1.000), χ² 1.08, XCH₄ +9 ppb —
+  reproducing §18/§20. The corrupted file gave ~0.54.
+- **Backups consolidated:** kept only `absco.hitran2020_iso1_original.h5` (the
+  original HITRAN2020 iso-1 table). **Open provenance question:** the all-iso `ch4`
+  band integral is **0.998×** iso-1 (should be ≥1) — likely a HITRAN2020→2024
+  line-list revision; diff the two before trusting `ch4` to sub-% absolute. Both
+  `.h5` files live only on the Drive mount (no off-Drive copy).
+
 ## Synthesis (current understanding)
 
 The airmass-scaled, molecule-specific, bandhead-localized residual — robust across
@@ -647,7 +666,8 @@ the pressures the EM27 sees, to set expectations before sourcing/coding it.
 - **Spectroscopy build (§18):** `gert/utils/fetch_hitran.py` + `build_absco.py`
   (iso_ids / line_shape; multi-iso + SD/LM), `gert/utils/absco_spec_iso.yml`,
   `scripts/build_o2_cia.py` (CIA → effective σ, `--validate`/`--merge`).
-  Backups: `absco.bkup3.h5` (pre-iso), `absco.bkup_precia.h5` (pre-CIA).
+  The all-iso+CIA result lives in `absco.h5` (rebuilt §23); the only retained
+  backup is `absco.hitran2020_iso1_original.h5` (bkup3/bkup_precia deleted §23).
 - **§19:** `scripts/build_h2o_continuum.py` (MT_CKD → effective σ, baseline-order
   sweep validate; **not merged** — continuum is a no-op in these dry windows),
   `plot_timeofday.py` (H₂O vs T driver of EOF2), `retrieve_spectrum(baseline_order=)`.
